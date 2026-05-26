@@ -20,13 +20,22 @@ from rag import build_prompt, search
 from tools import detect_tool
 
 # ---------------------------------------------------------------------------
-# 环境变量
+# 环境变量（兼容本地 .env 和 Streamlit Cloud secrets）
 # ---------------------------------------------------------------------------
 load_dotenv()
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.xiaomimimo.com/v1")
-API_KEY = os.getenv("API_KEY", "")
-MODEL_NAME = os.getenv("MODEL_NAME", "xiaomi-token-plan-cn/mimo-v2.5-pro")
+
+def _get_config(key: str, default: str) -> str:
+    """优先从 st.secrets 读取，其次从环境变量读取。"""
+    try:
+        return st.secrets[key]
+    except (KeyError, FileNotFoundError):
+        return os.getenv(key, default)
+
+
+API_BASE_URL = _get_config("API_BASE_URL", "https://api.xiaomimimo.com/v1")
+API_KEY = _get_config("API_KEY", "")
+MODEL_NAME = _get_config("MODEL_NAME", "xiaomi-token-plan-cn/mimo-v2.5-pro")
 
 # ---------------------------------------------------------------------------
 # 场景配置
@@ -236,10 +245,13 @@ if prompt := st.chat_input("请输入您的问题..."):
 
         # 2b. RAG 检索
         chunks = search(prompt, current_scene["knowledge_file"], top_k=3)
-        internal_steps["RAG 检索"] = (
-            "\n\n".join(f"📄 片段 {i+1}：{c[:200]}..." if len(c) > 200 else f"📄 片段 {i+1}：{c}")
-            for i, c in enumerate(chunks)
-        ) if chunks else "未检索到相关内容"
+        if chunks:
+            internal_steps["RAG 检索"] = "\n\n".join(
+                f"📄 片段 {i+1}：{c[:200]}..." if len(c) > 200 else f"📄 片段 {i+1}：{c}"
+                for i, c in enumerate(chunks)
+            )
+        else:
+            internal_steps["RAG 检索"] = "未检索到相关内容"
 
         # 2c. 构建 Prompt
         rag_prompt = build_prompt(prompt, chunks)
