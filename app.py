@@ -696,7 +696,8 @@ if prompt := st.chat_input("请输入您的问题..."):
             with st.spinner("🤖 AI 正在思考..."):
                 response = _stream_chat(messages_for_api)
             full_response = st.write_stream(
-                (chunk.choices[0].delta.content or "" for chunk in response if chunk.choices[0].delta.content)
+                (chunk.choices[0].delta.content for chunk in response
+                 if chunk.choices and chunk.choices[0].delta.content)
             )
         except Exception as exc:
             full_response = f"❌ API 调用失败：{exc}"
