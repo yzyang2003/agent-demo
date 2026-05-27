@@ -13,6 +13,7 @@ Agent 引擎模块 - 多步推理流程编排
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from tools import TOOLS, detect_tool
@@ -49,6 +50,154 @@ SCENE_KNOWLEDGE: dict[str, str] = {
     "tourism": "tourism.txt",
     "fitness": "fitness.txt",
 }
+
+
+# ---------------------------------------------------------------------------
+# 参数提取函数（从用户查询中提取工具所需参数）
+# ---------------------------------------------------------------------------
+def _extract_itinerary_params(message: str) -> tuple[str | None, int | None]:
+    """提取目的地和天数。"""
+    days = None
+    day_match = re.search(r"(\d+)\s*天", message)
+    if day_match:
+        days = int(day_match.group(1))
+
+    known_destinations = [
+        "三亚", "北京", "上海", "广州", "深圳", "成都", "杭州", "西安", "重庆", "武汉",
+        "长沙", "南京", "苏州", "厦门", "青岛", "大连", "桂林", "昆明", "大理", "丽江",
+        "张家界", "凤凰古城", "衡山", "韶山",
+    ]
+    destination = None
+    for city in known_destinations:
+        if city in message:
+            destination = city
+            break
+    if not destination:
+        match = re.search(r"(?:去|到)([\u4e00-\u9fa5]{2,4})(?:旅游|玩|行程)", message)
+        if match:
+            destination = match.group(1)
+    return destination, days
+
+
+def _extract_country(message: str) -> str | None:
+    """提取国家名称。"""
+    known_countries = [
+        "日本", "韩国", "泰国", "新加坡", "马来西亚", "越南",
+        "美国", "英国", "法国", "德国", "澳大利亚", "加拿大",
+    ]
+    for country in known_countries:
+        if country in message:
+            return country
+    match = re.search(r"([\u4e00-\u9fa5]{2,4})(?:签证)", message)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _extract_city(message: str) -> str:
+    """提取城市名称。"""
+    known_cities = ["长沙", "北京", "上海", "广州", "深圳", "成都", "杭州", "西安", "重庆", "武汉"]
+    for city in known_cities:
+        if city in message:
+            return city
+    match = re.search(r"([\u4e00-\u9fa5]{2,4})(?:的)?天气", message)
+    if match:
+        return match.group(1)
+    return "长沙"
+
+
+def _extract_bmi_params(message: str) -> tuple[float | None, float | None]:
+    """提取体重(kg)和身高(m)。"""
+    numbers = re.findall(r"\d+\.?\d*", message)
+    weight, height = None, None
+    if len(numbers) >= 2:
+        nums = [float(n) for n in numbers]
+        for n in nums:
+            if n > 100 and weight is None:
+                weight = n
+            elif 0.5 < n < 3 and height is None:
+                height = n
+        if weight is None or height is None:
+            weight = weight or nums[0]
+            height = height or nums[1]
+    elif len(numbers) == 1:
+        weight = float(numbers[0])
+    return weight, height
+
+
+def _extract_calorie_params(message: str) -> tuple[str | None, str]:
+    """提取食物名称和份量。"""
+    known_foods = [
+        "鸡胸肉", "牛肉", "鸡蛋", "米饭", "面条", "红薯", "西兰花", "苹果", "香蕉",
+        "牛奶", "酸奶", "豆腐", "虾", "三文鱼", "燕麦", "坚果", "番茄", "黄瓜",
+    ]
+    food = None
+    for f in known_foods:
+        if f in message:
+            food = f
+            break
+    if not food:
+        match = re.search(r"([\u4e00-\u9fa5]{2,6})(?:的)?(?:热量|卡路里|多少卡)", message)
+        if match:
+            food = match.group(1)
+    portion = "100g"
+    portion_match = re.search(r"(\d+\.?\d*)\s*(g|kg|斤|两)", message)
+    if portion_match:
+        portion = portion_match.group(0)
+    return food, portion
+
+
+def _extract_workout_params(message: str) -> tuple[str | None, int]:
+    """提取训练目标和时长。"""
+    goals = ["增肌", "减脂", "塑形", "体能", "初学者"]
+    goal = None
+    for g in goals:
+        if g in message:
+            goal = g
+            break
+    if not goal:
+        if any(kw in message for kw in ["长肌肉", "变壮", "力量"]):
+            goal = "增肌"
+        elif any(kw in message for kw in ["减肥", "瘦身", "脂肪"]):
+            goal = "减脂"
+        elif any(kw in message for kw in ["新手", "入门"]):
+            goal = "初学者"
+    duration = 60
+    duration_match = re.search(r"(\d+)\s*(?:分钟|min)", message)
+    if duration_match:
+        duration = int(duration_match.group(1))
+    return goal, duration
+
+
+def _extract_nutrition_params(message: str) -> tuple[float | None, str | None]:
+    """提取体重和目标。"""
+    weight = None
+    weight_match = re.search(r"(\d+\.?\d*)\s*(?:kg|公斤|斤)", message)
+    if weight_match:
+        weight = float(weight_match.group(1))
+        if "斤" in message:
+            weight = weight / 2
+    if not weight:
+        numbers = re.findall(r"\d+\.?\d*", message)
+        for n in numbers:
+            num = float(n)
+            if 30 < num < 200:
+                weight = num
+                break
+    goals = ["增肌", "减脂", "维持"]
+    goal = None
+    for g in goals:
+        if g in message:
+            goal = g
+            break
+    if not goal:
+        if any(kw in message for kw in ["长肌肉", "变壮", "增重"]):
+            goal = "增肌"
+        elif any(kw in message for kw in ["减肥", "瘦身", "减重"]):
+            goal = "减脂"
+        elif any(kw in message for kw in ["保持", "维持"]):
+            goal = "维持"
+    return weight, goal
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +319,7 @@ class AgentEngine:
             return None
 
         try:
-            result = tool_func(query)
+            result = self._call_tool_with_params(query, tool_name, tool_func)
             output = str(result)
         except Exception as exc:
             output = f"工具调用失败：{exc}"
@@ -185,6 +334,51 @@ class AgentEngine:
             "content": f"工具 {tool_name} 返回结果：{output[:200]}",
         })
         return output
+
+    def _call_tool_with_params(self, query: str, tool_name: str, tool_func) -> dict | None:
+        """根据工具名称提取参数并调用工具。"""
+        if tool_name == "get_weather":
+            city = _extract_city(query)
+            return tool_func(city)
+
+        if tool_name == "calculate_bmi":
+            weight, height = _extract_bmi_params(query)
+            if weight and height:
+                return tool_func(weight, height)
+            return None
+
+        if tool_name == "plan_itinerary":
+            destination, days = _extract_itinerary_params(query)
+            if destination and days:
+                return tool_func(destination, days)
+            return None
+
+        if tool_name == "check_visa":
+            country = _extract_country(query)
+            if country:
+                return tool_func(country)
+            return None
+
+        if tool_name == "estimate_calorie":
+            food, portion = _extract_calorie_params(query)
+            if food:
+                return tool_func(food, portion)
+            return None
+
+        if tool_name == "generate_workout":
+            goal, duration = _extract_workout_params(query)
+            if goal:
+                return tool_func(goal, duration)
+            return None
+
+        if tool_name == "get_nutrition_plan":
+            weight, goal = _extract_nutrition_params(query)
+            if weight and goal:
+                return tool_func(weight, goal)
+            return None
+
+        # 未知工具，尝试直接调用
+        return tool_func(query)
 
     def _retrieve_knowledge(
         self, query: str, scene: str, response: AgentResponse
