@@ -15,7 +15,7 @@ TOOLS = {
         "function": get_weather,
         "description": WEATHER_TOOL_DESC,
         "keywords": ["天气", "气温", "下雨", "温度", "weather"],
-        "scene": "tourism"  # 旅游场景
+        "scene": "tourism"
     },
     "plan_itinerary": {
         "function": plan_itinerary,
@@ -32,25 +32,25 @@ TOOLS = {
     "calculate_bmi": {
         "function": calculate_bmi,
         "description": BMI_TOOL_DESC,
-        "keywords": ["bmi", "BMI", "体重指数", "身体质量指数", "胖", "瘦", "体重"],
-        "scene": "fitness"  # 健身场景
+        "keywords": ["bmi", "BMI", "体重指数", "身体质量指数", "胖", "瘦"],
+        "scene": "fitness"
     },
     "estimate_calorie": {
         "function": estimate_calorie,
         "description": CALORIE_TOOL_DESC,
-        "keywords": ["卡路里", "热量", "千卡", "食物热量", "多少卡"],
+        "keywords": ["卡路里", "热量", "千卡", "食物热量", "多少卡", "卡"],
         "scene": "fitness"
     },
     "generate_workout": {
         "function": generate_workout,
         "description": WORKOUT_TOOL_DESC,
-        "keywords": ["训练计划", "健身计划", "怎么练", "训练安排", "锻炼"],
+        "keywords": ["训练计划", "健身计划", "怎么练", "训练安排", "锻炼", "训练"],
         "scene": "fitness"
     },
     "get_nutrition_plan": {
         "function": get_nutrition_plan,
         "description": NUTRITION_TOOL_DESC,
-        "keywords": ["营养", "饮食", "吃什么", "食谱", "膳食", "蛋白质"],
+        "keywords": ["营养", "饮食", "吃什么", "食谱", "膳食", "蛋白质", "每天吃", "吃多少", "餐食", "一天吃"],
         "scene": "fitness"
     }
 }
@@ -70,11 +70,9 @@ def detect_tool(message: str, scene: str = None) -> tuple:
     message_lower = message.lower()
     
     for tool_name, tool_info in TOOLS.items():
-        # 如果指定了场景，只检测该场景的工具
         if scene and tool_info["scene"] != scene:
             continue
         
-        # 检查关键词匹配
         for keyword in tool_info["keywords"]:
             if keyword in message_lower:
                 return tool_name, tool_info["function"]
